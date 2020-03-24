@@ -5,31 +5,43 @@ import copy
 def main():
     # Real vectors
     v = Vector([1, 2, 3])
-    print(v)
+    # print(v)
 
     # Complex vectors
     u = Vector([4+1j, 5-1j, 6])
-    print(u)
+    # print(u)
 
     # Real matrices
     n = Matrix([[1, 2],[3, 4]])
-    print(n)
+    # print(n)
 
     # Complex matrices
     m = Matrix([[1+2j, 3+4j], [5+6j, 7+8j]])
-    print(m)
+    # print(m)
 
     # Transposition
     a = Matrix([[1,2,3],[4,5,6]])
-    print(a)
-    print(a.transpose())
+    # print(a)
+    # print(a.transpose())
 
     # Vector as matrix
-    print(v.to_matrix())
+    # print(v.to_matrix())
 
     # Dot product
-    print(u)
-    print(v.dot(u))
+    # print(u)
+    # print(v.dot(u))
+
+    # Matrix multiplication
+    b = Matrix([[7, 8], [9, 0], [1,2]])
+    # print(a*b)
+
+    # Column vectors
+    # print(a.col_vectors)
+
+    # Determinant
+    c = Matrix([[42, 1, 0], [-5, 1, 0], [0, 0, 1]])
+    print(c.det())
+    print(Matrix([[3,1,4],[1,5,9],[2,6,5]]).det())
 
 def empty1d(length):
     return [None] * length
@@ -52,6 +64,9 @@ class Vector():
     
     def __len__(self):
         return self.length
+
+    def __repr__(self):
+        return "Vector("+str(self.values)+")"
 
     def __str__(self):
         return "<"+", ".join([str(v) for v in self.values])+">"
@@ -76,7 +91,7 @@ class Vector():
 class Matrix():
     def __init__(self, values):
         self._rows = len(values)
-        self._cols = len(values[0])
+        self._cols = len(values[0]) if self.rows > 0 else 0
         for row in values:
             assert len(row) == self.cols  # Ensures that the array is not jagged
             for value in row:
@@ -90,9 +105,20 @@ class Matrix():
     @property
     def cols(self):
         return self._cols
+
+    def __repr__(self):
+        return "Matrix("+str(self.values)+")"
     
     def __str__(self):
         return str(self.values)
+    
+    @property
+    def row_vectors(self):
+        return [Vector(row) for row in self.values]
+    
+    @property
+    def col_vectors(self):
+        return [Vector(col) for col in self.transpose().values]
 
     def transpose(self):
         result = empty2d(self.cols, self.rows)
@@ -117,6 +143,25 @@ class Matrix():
                 for j in range(self.cols):
                     result[i][j] *= other
             return Matrix(result)
+        elif isinstance(other, Matrix):
+            assert self.cols == other.rows
+            result = empty2d(other.cols, self.rows)
+            for i in range(self.rows):
+                for j in range(other.cols):
+                    result[i][j] = self.row_vectors[i].dot(other.col_vectors[j])
+            return Matrix(result)
+    
+    def det(self):
+        assert self.rows == self.cols
+        if self.rows == 0:
+            return 1
+        result = 0
+        for i in range(self.rows):
+            sub = Matrix([[e for c, e in enumerate(row) if c != 0] for r, row in enumerate(self.values) if r != i])
+            d = sub.det()
+            x = ((-1)**i)*self.values[i][0]*d
+            result += x
+        return result
 
 if __name__ == "__main__":
     main()
