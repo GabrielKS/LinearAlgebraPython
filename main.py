@@ -13,7 +13,7 @@ def main():
 
     # Real matrices
     n = Matrix([[1, 2],[3, 4]])
-    # print(n)
+    print(n)
 
     # Complex matrices
     m = Matrix([[1+2j, 3+4j], [5+6j, 7+8j]])
@@ -40,8 +40,8 @@ def main():
 
     # Determinant
     c = Matrix([[42, 1, 0], [-5, 1, 0], [0, 0, 1]])
-    print(c.det())
-    print(Matrix([[3,1,4],[1,5,9],[2,6,5]]).det())
+    # print(c.det())
+    # print(Matrix([[3,1,4],[1,5,9],[2,6,5]]).det())
 
 def empty1d(length):
     return [None] * length
@@ -110,7 +110,7 @@ class Matrix():
         return "Matrix("+str(self.values)+")"
     
     def __str__(self):
-        return str(self.values)
+        return "["+" \n ".join(["["+", ".join([str(v) for v in row])+"]" for row in self.values])+"]"
     
     @property
     def row_vectors(self):
