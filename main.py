@@ -20,6 +20,7 @@
 #   - TODO: Split the Matrix class off into a matrix.py and just put tests here
 #   - TODO: Come up with a better name for the project
 #   - TODO: I get the sense that the various methods of iteration and enumeration could use some cleanup
+#   - TODO: Maybe implement a more standardized testing protocol
 
 import time
 import numbers
@@ -54,7 +55,7 @@ def main():
     # print(m1)
     m1[0, :] = Matrix([[-2, -3]])
     # print(m1)
-    m1[:, 0] = [[-4],[-5]]
+    m1[:, 0] = Matrix([[-4],[-5]])
     # print(m1)
 
     # Transposition
@@ -121,10 +122,15 @@ def main():
     # print(g.rref())
 
     #Orthonormality
-    print(Matrix([[1,0],[0,1]]).is_orthonormal())  # orthonormal
-    print(Matrix([[1,0],[1,0]]).is_orthonormal())  # not orthogonal
-    print(Matrix([[2,0],[0,1]]).is_orthonormal())  # not normal
-    print(Matrix([[1/math.sqrt(2),1/math.sqrt(2)],[1/math.sqrt(2),-1/math.sqrt(2)]]).is_orthonormal(tolerance = 1e-15))  # orthonormal, but only with a tolerance
+    # print(Matrix([[1,0],[0,1]]).is_orthonormal())  # orthonormal
+    # print(Matrix([[1,0],[1,0]]).is_orthonormal())  # not orthogonal
+    # print(Matrix([[2,0],[0,1]]).is_orthonormal())  # not normal
+    # print(Matrix([[1/math.sqrt(2),1/math.sqrt(2)],[1/math.sqrt(2),-1/math.sqrt(2)]]).is_orthonormal(tolerance = 1e-15))  # orthonormal, but only with a tolerance
+
+    #Gram-Schmidt
+    gs = Matrix([[3,1,4],[2,7,1],[1,6,1]]).gram_schmidt()
+    print(gs)
+    print(gs.is_orthonormal(tolerance=1e-10))
 
 
 Scalar = numbers.Complex  # GH 0.2
@@ -229,7 +235,8 @@ class Matrix():  # GH 0.3
             sliced_rows = self.values[i]
             if len(sliced_rows) == 0: return []
             if type(sliced_rows[0]) is not list: sliced_rows = [sliced_rows]
-            for x, row in enumerate(sliced_rows): row[j] = value[x][j]
+            for x, row in enumerate(sliced_rows):
+                row[j] = value[x]
         else:
             self.values[i][j] = value
     
@@ -356,6 +363,15 @@ class Matrix():  # GH 0.3
             x = ((-1)**i)*self[i,0]*d
             result += x
         return result
+    
+    def leading(self):  # Returns (row, col), value for the leading value. This is the leading (i.e., first nonzero) value in the first nonzero row.
+        for (i,j),x in self.enumerate():  # enumerate() is guaranteed to iterate the way we want it to
+            if x != 0:
+                return ((i,j),x)
+        return ((None,None),None)
+
+    def mag(self):  # Magnitude
+        return math.sqrt(self.dot(self))
 
     #ELEMENTARY BINARY OPERATIONS
     def __eq__(self, other): return self.rows == other.rows and self.cols == other.cols and all([x == other[i,j] for (i,j),x in self.enumerate()])
@@ -412,30 +428,41 @@ class Matrix():  # GH 0.3
         return True
     
     #ALGORITHMS
-    def rref(self):  # B pg15
-        result = self.copy()
-        for i,row in result.enumrows():
-            # Find the leading value in row i
-            (_,leading_index),leading_value = row.leading()
+    def rref(self, inplace=False):  # B pg15
+        if not inplace:
+            result = self.copy()
+            result.rref(inplace=True)
+            return result
+        else:
+            for i,row in self.enumrows():
+                # Find the leading value in row i
+                (_,leading_index),leading_value = row.leading()
 
-            # Normalize the leading value, if possible
-            if leading_index is None: break
-            else: result[i,:] /= leading_value
+                # Normalize the leading value, if possible
+                if leading_index is None: break
+                else: self[i,:] /= leading_value
 
-            # Eliminate the rest of the values in col leading_index
-            for i_e, row_e in result.enumrows():
-                if i_e != i:
-                    result[i_e,:] -= result[i,:]*row_e[0,leading_index]
+                # Eliminate the rest of the values in col leading_index
+                for i_e, row_e in self.enumrows():
+                    if i_e != i:
+                        self[i_e,:] -= self[i,:]*row_e[0,leading_index]
         
         # Sort the rows so that leading values go from left to right as row number increases
         # We do this with a nested lambda expression that returns the index of the leading value if it exists, otherwise the number of cols in the row. Nesting allows us to only call leading() once per row.
-        return result.sortrows(lambda row: (lambda row, leading: leading if leading is not None else row.cols)(row, row.leading()[0][1]))
-    
-    def leading(self):  # Returns (row, col), value for the leading value. This is the leading (i.e., first nonzero) value in the first nonzero row.
-        for (i,j),x in self.enumerate():  # enumerate() is guaranteed to iterate the way we want it to
-            if x != 0:
-                return ((i,j),x)
-        return ((None,None),None)
+        self.sortrows(lambda row: (lambda row, leading: leading if leading is not None else row.cols)(row, row.leading()[0][1]), inplace=True)
+
+    def gram_schmidt(self, inplace=False):  # GH pg107. Applies the Gram-Schmidt process on the cols of self to create an orthonormal basis. Assumes cols are linearly independent.
+        if not inplace:
+            result = self.copy()
+            result.gram_schmidt(inplace=True)
+            return result
+        else:
+            for j_active,col_active in self.enumcols():
+                for j_previous,col_previous in self.enumcols():
+                    if j_previous >= j_active: break
+                    self[:,j_active] -= col_active.dot(col_previous)*col_previous
+                self[:,j_active] /= self[:,j_active].mag()
+
 
 if __name__ == "__main__":
     main()
