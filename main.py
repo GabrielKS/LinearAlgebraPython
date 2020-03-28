@@ -1,23 +1,31 @@
 # LinearAlgebraPython, by Gabriel Konar-Steenberg
 # An attempt to write out in code some linear algebra algorithms and properties, mostly for my own educational benefit
-# Technical correctness is a high priority; optimization is very much not. Elegance is nice.
+#
+# Technical correctness is a high priority; optimization is very much not. Elegance is nice. Things should be Pythonic where that is nice.
 # I use the built-in Python libraries, but no external libraries -- in particular, no NumPy.
+#
 # From time to time I cite my first and second linear algebra textbooks with an abbreviation and a section or page number; these textbooks are, respectively:
 #   B:  Bretscher, Otto (2013). "Linear Algebra with Applications (Fifth Edition)."
 #   GH: Garcia, Stephan Ramon and Horn, Roger A. (2017). "A Second Course in Linear Algebra."
+#
 # Conventions:
 #   - I always write "col" instead of "column"
 #   - Everything is indexed from 0, so the top-left entry of a matrix is mat[0,0]
 #   - The 0x0 matrix exists and its representation in array form is [] (not [[]])
-# Major TODO items:
+#   - An n-dimensional vector is a nx1 matrix (meaning its representation in array form is [[v1],[v2],[v3],...])
+#
+# Major TODO items (minor items are scattered throughout the code):
 #   - TODO: Handle fractions nicely using Python's native fraction support
 #   - TODO: Implement automatic fraction handling to avoid annoying floating point errors (2.999999...8)
 #   - TODO: Split the Matrix class off into a matrix.py and just put tests here
+#   - TODO: Come up with a better name for the project
+#   - TODO: I get the sense that the various methods of iteration and enumeration could use some cleanup
 
 import time
 import numbers
 import copy
 import decimal
+import math
 from random import random
 
 def main():
@@ -112,6 +120,12 @@ def main():
     # print(g)
     # print(g.rref())
 
+    #Orthonormality
+    print(Matrix([[1,0],[0,1]]).is_orthonormal())  # orthonormal
+    print(Matrix([[1,0],[1,0]]).is_orthonormal())  # not orthogonal
+    print(Matrix([[2,0],[0,1]]).is_orthonormal())  # not normal
+    print(Matrix([[1/math.sqrt(2),1/math.sqrt(2)],[1/math.sqrt(2),-1/math.sqrt(2)]]).is_orthonormal(tolerance = 1e-15))  # orthonormal, but only with a tolerance
+
 
 Scalar = numbers.Complex  # GH 0.2
 
@@ -129,7 +143,7 @@ def is_2d_non_jagged_of_type(arr, type):
 
 class Matrix():  # GH 0.3
     # CREATION AND MUTATION
-    def __init__(self, values):
+    def __init__(self, values):  # The main way to create a matrix is by providing a two-dimensional array (i.e., a list of lists) with the desired values. Other ways include construction as a block matrix, construction by index, and using the built-in methods for zero matrices and identity matrices.
         self.reset(values)
     
     def reset(self, values):  # Re-initialize
@@ -140,6 +154,7 @@ class Matrix():  # GH 0.3
 
     def assign(self, other):  # Mutate self into other (i.e., make self equal to other without messing with references)
         self.reset(other.values)
+        assert self == other
     
     @classmethod
     def from_block(cls, submatrices):  # Assumes that the blocks line up, i.e., all the blocks on a given input row (resp. col) have the same number of rows (resp. cols)
@@ -330,7 +345,7 @@ class Matrix():  # GH 0.3
                 result[j,i] = x
         return result
     
-    def det(self):  # TODO rewrite so it is easier to follow and doesn't refer to self.values
+    def det(self):  # Computes the determinant by cofactor expansion about the first col. TODO rewrite so it is easier to follow and doesn't refer to self.values
         assert self.rows == self.cols
         if self.rows == 0:
             return 1
@@ -389,6 +404,12 @@ class Matrix():  # GH 0.3
 
     def is_inverse(self, other):
         return (self*other).is_identity()
+
+    def is_orthonormal(self, tolerance=0):  # GH 5.1.2. WARNING: in almost all practical cases, floating point imprecision will require you to set a nonzero tolerance to get useful results. TODO: determine whether there can be a good and fairly universal nonzero tolerance value.
+        for i1,row1 in self.enumcols():
+            for i2,row2 in self.enumcols():
+                if abs(row1.dot(row2)-kronecker_delta(i1, i2)) > tolerance: return False
+        return True
     
     #ALGORITHMS
     def rref(self):  # B pg15
