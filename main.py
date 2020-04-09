@@ -28,6 +28,7 @@ import copy
 import decimal
 import math
 from random import random
+import operator
 
 def main():
     # Real vectors (are matrices)
@@ -129,11 +130,30 @@ def main():
 
     #Gram-Schmidt
     gs = Matrix([[3,1,4],[2,7,1],[1,6,1]]).gram_schmidt()
-    print(gs)
-    print(gs.is_orthonormal(tolerance=1e-10))
+    # print(gs)
+    # print(gs.is_orthonormal(tolerance=1e-10))
+
+    #Householder
+    v = Matrix.vector_from_list([4,0,-3])
+    print(v.householder())
+    # ua = v.unitary_annihilator()
+    # print(v)
+    # print(ua)
+    # print(ua*v)
+
+    #QR Factorization
+    s = Matrix([[3,1],[4,2]])
+    q,r = s.qr_factorization(tolerance=0.01)
+    # print(s)
+    # print(q)
+    # print(r)
+    # print(q*r)
+
+
 
 
 Scalar = numbers.Complex  # GH 0.2
+Real = numbers.Real
 
 def kronecker_delta(i, j):  # GH pg3
     return 1 if i == j else 0
@@ -148,18 +168,24 @@ def is_2d_non_jagged_of_type(arr, type):
     return True
 
 class Matrix():  # GH 0.3
+    # STATE
+    # A Matrix's state is defined entirely by the following:
+    #   - values: a list of 0 or more lists of entries
+    #   - col_major: a bool representing whether the top-level entries of values are rows (False) or columns (True)
+
     # CREATION AND MUTATION
-    def __init__(self, values):  # The main way to create a matrix is by providing a two-dimensional array (i.e., a list of lists) with the desired values. Other ways include construction as a block matrix, construction by index, and using the built-in methods for zero matrices and identity matrices.
-        self.reset(values)
+    def __init__(self, values, col_major=False):  # The main way to create a matrix is by providing a two-dimensional array (i.e., a list of lists) with the desired values. Other ways include construction as a block matrix, construction by index, and using the built-in methods for zero matrices and identity matrices.
+        self.reset(values, col_major)
     
-    def reset(self, values):  # Re-initialize
+    def reset(self, values, col_major=False):  # Re-initialize
         if isinstance(values, Scalar): self.reset([[values]])  # Tolerate scalars by converting them to 1x1 matrices
         else:
             assert is_2d_non_jagged_of_type(values, Scalar)
             self.values = copy.deepcopy(values)
+            self.col_major = col_major
 
     def assign(self, other):  # Mutate self into other (i.e., make self equal to other without messing with references)
-        self.reset(other.values)
+        self.reset(other.values, other.col_major)
         assert self == other
     
     @classmethod
@@ -188,7 +214,7 @@ class Matrix():  # GH 0.3
     
     def vector_to_list(self):
         assert self.is_vector()
-        return self.transpose().values[0]
+        return self.values[0] if col_major else self.transpose().values[0]
     
     def is_vector(self):
         return self.cols == 1
@@ -218,18 +244,20 @@ class Matrix():  # GH 0.3
 
     def __getitem__(self, key):
         i,j = self.unpack_index_key(key)
+        if self.col_major: i,j = j,i
         if isinstance(i, slice) or isinstance(j, slice):
             sliced_rows = self.values[i]
             if len(sliced_rows) == 0: return []
             if type(sliced_rows[0]) is not list: sliced_rows = [sliced_rows]
             result = Matrix([(row[j] if type(row[j]) is list else [row[j]]) for row in sliced_rows])
-            if result.rows == 1 and result.cols == 1: return result[0,0]  # If the result is a single value, return the value instead of a 1x1 matrix
-            else: return result
+            # if result.rows == 1 and result.cols == 1: return result[0,0]  # If the result is a single value, return the value instead of a 1x1 matrix
+            return result
         else:
             return self.values[i][j]
     
     def __setitem__(self, key, value):
         i,j = self.unpack_index_key(key)
+        if self.col_major: i,j = j,i
         if isinstance(value, Matrix): value = value.values
         if isinstance(i, slice) or isinstance(j, slice):
             sliced_rows = self.values[i]
@@ -246,24 +274,28 @@ class Matrix():  # GH 0.3
     #PROPERTIES
     @property
     def rows(self):
-        return len(self.values)
+        return (len(self.values[0]) if self.cols > 0 else 0) if self.col_major else len(self.values)
     
     @property
     def cols(self):
-        return len(self.values[0]) if self.rows > 0 else 0
+        return len(self.values) if self.col_major else (len(self.values[0]) if self.rows > 0 else 0)
     
     @property
     def length(self):
         return self.rows
     
-    def __len__(self):
-        return self.length
+    def __len__(self):  # WARNING: len(mat) will return the number of rows, not the number of entries
+        return self.len
+    
+    @property
+    def len(self):
+        return self.rows
 
     def __repr__(self):
-        return "Matrix("+str(self.values)+")"
+        return "Matrix("+str(self.values)+(", col_major=True" if self.col_major else "")+")"
     
     def __str__(self):
-        return "["+" \n ".join(["["+", ".join([str(v) for v in row])+"]" for row in self.values])+"]"
+        return "["+" \n ".join(["["+", ".join([str(v) for v in row])+"]" for row in self.values])+"]"+("T" if self.col_major else "")
     
     #ELEMENT MANIPULATION
     # TODO: come up with a more generalized way of doing inplace
@@ -341,18 +373,24 @@ class Matrix():  # GH 0.3
             result[i,j] = f(i,j)
         return result
     
-    #ELEMENTARY UNARY OPERATIONS
-    def __pos__(self): return self.apply(lambda x: +x)
-    def __neg__(self): return self.apply(lambda x: -x)
-    # def __abs__(self): return self.apply(lambda x: abs(x))
+    #UNARY OPERATIONS
+    def __pos__(self): return self.apply(operator.pos)
+    def __neg__(self): return self.apply(operator.neg)
+    # def __abs__(self): return self.apply(operator.abs)
 
-    def transpose(self):
+    def transpose(self):  # TODO: inplace
         result = self.zero(self.cols, self.rows)
         for (i,j),x in self.enumerate():
                 result[j,i] = x
         return result
     
-    def det(self):  # Computes the determinant by cofactor expansion about the first col. TODO rewrite so it is easier to follow and doesn't refer to self.values
+    def conjugate(self, inplace=False):
+        return self.apply(lambda x: x.conjugate(), inplace)
+    
+    def adjoint(self):  # TODO: inplace
+        return self.transpose().conjugate()
+    
+    def det(self):  # Computes the determinant by cofactor expansion about the first (row if self.col_major else col). TODO rewrite so it is easier to follow and doesn't refer to self.values
         assert self.rows == self.cols
         if self.rows == 0:
             return 1
@@ -373,11 +411,11 @@ class Matrix():  # GH 0.3
     def mag(self):  # Magnitude
         return math.sqrt(self.dot(self))
 
-    #ELEMENTARY BINARY OPERATIONS
+    #BINARY OPERATIONS
     def __eq__(self, other): return self.rows == other.rows and self.cols == other.cols and all([x == other[i,j] for (i,j),x in self.enumerate()])
 
-    def __add__(self, other): return self.apply_binary(other, lambda x,y: x+y)
-    def __sub__(self, other): return self.apply_binary(other, lambda x,y: x-y)
+    def __add__(self, other): return self.apply_binary(other, operator.add)
+    def __sub__(self, other): return self.apply_binary(other, operator.sub)
 
     def dot(self, other):
         assert self.is_vector()
@@ -385,35 +423,46 @@ class Matrix():  # GH 0.3
         return sum(self.apply_binary(other, lambda x,y: x*y))
 
     def __mul__(self, other):
+        if isinstance(other, Matrix) and other.rows == 1 and other.cols == 1:
+            return self*other[0,0]
         if isinstance(other, Scalar):
             return self.apply(lambda x: other*x)
         else:
             assert self.cols == other.rows
-            result = self.zero(other.cols, self.rows)
-            for (i,j),_ in self.enumerate():
-                    result[i,j] = self[i,:].transpose().dot(other[:,j])
+            result = self.zero(self.rows, other.cols)
+            for (i,j),_ in result.enumerate():
+                result[i,j] = self[i,:].transpose().dot(other[:,j])
             return result
 
     def __rmul__(self, other):
-        assert isinstance(other, Scalar)
+        assert isinstance(other, Scalar) or (isinstance(other, Matrix) and other.rows == 1 and other.cols == 1)
         return self*other
     
     def __truediv__(self, other):
         assert isinstance(other, Scalar)
         return self.apply(lambda x: x/other)
+    
+    def direct_sum(self, other):
+        return self.from_block([[self, self.zero(self.rows, other.cols)],[self.zero(other.rows, self.cols), other]])
 
     #SPECIAL MATRICES
     @classmethod
     def zero(cls, rows, cols):
-        return cls([[0] * cols for i in range(rows)])
+        if rows == 0 and cols > 0: return cls([[] for i in range(cols)], col_major=True)
+        else: return cls([[0] * cols for i in range(rows)])
     
     @classmethod
     def ident(cls, n):  # GH pg3
         return cls.construct_by_indices(kronecker_delta, n, n)
     
+    @classmethod
+    def standard_basis(cls, rows, i):
+        return cls.construct_by_indices(lambda row,col: 1 if row == i else 0, rows, 1)
+    
     #TESTS FOR PROPERTIES
-    def is_zero(self):
-        return all([x == 0 for x in self])
+    def is_zero(self, tolerance=0):
+        # return all([x == 0 for x in self])
+        return sum(self.apply(lambda x: x*x)) <= tolerance  # A more tolerant method: a matrix is zero if the sum of the squares of the entries is <= tolerance. This is mathematically correct if tolerance=0.
 
     def is_identity(self):
         return all([x == kronecker_delta(i,j) for (i,j),x in self.enumerate()])
@@ -426,6 +475,19 @@ class Matrix():  # GH 0.3
             for i2,row2 in self.enumcols():
                 if abs(row1.dot(row2)-kronecker_delta(i1, i2)) > tolerance: return False
         return True
+    
+    def is_upper_triangular(self, tolerance=0):
+        for (i,j),x in self.enumerate():
+            if j<i and abs(x) > tolerance: return False
+        return True
+    
+    def is_lower_triangular(self, tolerance=0):
+        for (i,j),x in self.enumerate():
+            if j>i and abs(x) > tolerance: return False
+        return True
+    
+    def is_triangular(self, tolerance=0):
+        return self.is_upper_triangular(tolerance) and self.is_lower_triangular(tolerance)
     
     #ALGORITHMS
     def rref(self, inplace=False):  # B pg15
@@ -462,6 +524,42 @@ class Matrix():  # GH 0.3
                     if j_previous >= j_active: break
                     self[:,j_active] -= col_active.dot(col_previous)*col_previous
                 self[:,j_active] /= self[:,j_active].mag()
+                # TODO: add an is_orthonormal assertion once I've figured out if there can be a good value for tolerance
+
+    def householder(self):  # GH 6.4.3
+        assert self.is_vector()
+        u = self/self.mag()
+        pu = u*u.adjoint()
+        return self.ident(len(self))-2*pu
+    
+    def unitary_annihilator(self, tolerance=0):  # Full name: "unitary annihilator of the lower entries." GH 6.4.10. Returns a matrix such that x.unitary_annihilator()*x == x.mag()*Matrix.standard_basis(len(x), 1) (to within a tolerance)
+        assert self.is_vector()
+        sigma = 1 if abs(self[0,0]) <= tolerance else -(self[0,0]/abs(self[0,0]))
+        return sigma*self.householder()
+    
+    def qr_factorization(self, tolerance=0, flavor="narrow"):  # GH 6.5.2
+        m = self.rows
+        n = self.cols
+        assert m >= n
+        a = self
+        u = self.ident(m)
+
+        ap = a
+        for j in range(n):
+            a1 = ap[:,0]
+            up = ap.ident(m) if a1.is_zero(tolerance) else a1.householder()
+            uj = self.ident(j).direct_sum(up)
+            ap = (uj*ap)[1:, 1:]
+            u = uj*u
+
+        r = u*a
+        v = u.adjoint()
+
+        if flavor == "wide":
+            return v, Matrix.from_block([[r],[Matrix.zero(v.cols-r.rows, r.cols)]])
+        elif flavor == "narrow":
+            q = v[:,:n]
+            return q, r
 
 
 if __name__ == "__main__":
